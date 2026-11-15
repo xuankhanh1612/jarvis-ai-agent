@@ -103,6 +103,21 @@ Có thể xem trang cục bộ bằng `python -m http.server 8000 --directory pa
 
 ---
 
+## ▲ Triển khai trang giới thiệu lên Vercel
+
+Trang [`pages/`](pages/) là HTML/CSS tĩnh. [`vercel.json`](vercel.json) cấu hình Vercel xuất bản thư mục này thay vì trang tunnel cũ ở thư mục gốc; không cần build, biến môi trường hay cơ sở dữ liệu Supabase.
+
+1. Trong [Vercel](https://vercel.com/xuankhanh1612s-projects), chọn **Add New → Project** và import `xuankhanh1612/jarvis-ai-agent`.
+2. Giữ **Root Directory** ở thư mục gốc repository và chọn **Framework Preset: Other**. Bật Override cho Build Command rồi để trống; không cần Install Command.
+3. Đặt **Output Directory** thành `pages` (bật Override). Cài đặt này đặc biệt cần thiết nếu import `main` trước khi thay đổi chứa `vercel.json` được gộp vào `main`.
+4. Chọn **Deploy**. Nếu Git deployments được bật trong cài đặt project, các cập nhật sau trên nhánh production sẽ được Vercel tự triển khai.
+
+Nếu gặp `PYTHON_ENTRYPOINT_NOT_FOUND`, hãy đổi Framework Preset từ Python sang **Other** và deploy lại; không dùng entrypoint được gợi ý từ thư mục `tests/`.
+
+Vercel chỉ phục vụ trang giới thiệu; ứng dụng JARVIS v4 vẫn cần chạy trên Windows. Không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai. Supabase không biến ứng dụng Windows thành backend web và không cần thiết cho trang tĩnh này.
+
+---
+
 ## 🚀 Quickstart
 
 ### 1. Prerequisites
