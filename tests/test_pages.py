@@ -1,5 +1,6 @@
-"""Smoke tests for the static GitHub Pages site (no third-party dependencies)."""
+"""Smoke tests for the static site and its deployment configuration."""
 
+import json
 import shutil
 import tempfile
 import threading
@@ -79,32 +80,42 @@ class PagesTests(unittest.TestCase):
                 self.assertTrue(target.is_relative_to(SITE.resolve()))
                 self.assertTrue(target.is_file(), f"missing site asset: {target}")
 
-    def test_explains_that_pages_does_not_run_the_windows_app(self):
+    def test_explains_that_static_hosts_do_not_run_the_windows_app(self):
         content = " ".join(self.parser.text)
         self.assertIn("Windows", content)
-        self.assertIn("không chạy trực tiếp trên GitHub Pages", content)
+        self.assertIn("không chạy trực tiếp trên GitHub Pages hoặc Vercel", content)
         self.assertIn("không có xác thực", content)
         self.assertTrue((SITE / ".nojekyll").is_file())
 
-    def test_site_is_served_under_the_repository_prefix(self):
+    def test_vercel_publishes_only_the_static_site(self):
+        config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+        self.assertIsNone(config["framework"])
+        self.assertIsNone(config["buildCommand"])
+        self.assertIsNone(config["installCommand"])
+        self.assertEqual(config["outputDirectory"], "pages")
+        self.assertTrue((ROOT / config["outputDirectory"] / "index.html").is_file())
+
+    def test_site_is_served_at_root_and_under_the_repository_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
-            destination = Path(tmp) / "jarvis-ai-agent"
-            shutil.copytree(SITE, destination)
+            shutil.copytree(SITE, tmp, dirs_exist_ok=True)
+            shutil.copytree(SITE, Path(tmp) / "jarvis-ai-agent")
             handler = partial(QuietHandler, directory=tmp)
             with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
                 thread = threading.Thread(target=server.serve_forever, daemon=True)
                 thread.start()
                 try:
-                    root = f"http://127.0.0.1:{server.server_port}/jarvis-ai-agent/"
-                    for path, content_type in (
-                        ("", "text/html"),
-                        ("./styles.css", "text/css"),
-                        ("./favicon.svg", "image/svg+xml"),
-                    ):
-                        with self.subTest(path=path), urlopen(urljoin(root, path), timeout=5) as response:
-                            self.assertEqual(response.status, 200)
-                            self.assertEqual(response.headers.get_content_type(), content_type)
-                            self.assertTrue(response.read())
+                    for prefix in ("", "jarvis-ai-agent/"):
+                        root = f"http://127.0.0.1:{server.server_port}/{prefix}"
+                        for path, content_type in (
+                            ("", "text/html"),
+                            ("./styles.css", "text/css"),
+                            ("./favicon.svg", "image/svg+xml"),
+                        ):
+                            with self.subTest(prefix=prefix, path=path):
+                                with urlopen(urljoin(root, path), timeout=5) as response:
+                                    self.assertEqual(response.status, 200)
+                                    self.assertEqual(response.headers.get_content_type(), content_type)
+                                    self.assertTrue(response.read())
                 finally:
                     server.shutdown()
                     thread.join(timeout=5)
