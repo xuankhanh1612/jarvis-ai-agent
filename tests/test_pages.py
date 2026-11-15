@@ -87,13 +87,14 @@ class PagesTests(unittest.TestCase):
         self.assertIn("không có xác thực", content)
         self.assertTrue((SITE / ".nojekyll").is_file())
 
-    def test_vercel_publishes_only_the_static_site(self):
+    def test_vercel_publishes_the_web_app_not_the_repository_root(self):
         config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
         self.assertIsNone(config["framework"])
         self.assertIsNone(config["buildCommand"])
         self.assertIsNone(config["installCommand"])
-        self.assertEqual(config["outputDirectory"], "pages")
+        self.assertEqual(config["outputDirectory"], "web")
         self.assertTrue((ROOT / config["outputDirectory"] / "index.html").is_file())
+        self.assertIn("api/chat.py", config["functions"])
 
     def test_site_is_served_at_root_and_under_the_repository_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -111,11 +112,10 @@ class PagesTests(unittest.TestCase):
                             ("./styles.css", "text/css"),
                             ("./favicon.svg", "image/svg+xml"),
                         ):
-                            with self.subTest(prefix=prefix, path=path):
-                                with urlopen(urljoin(root, path), timeout=5) as response:
-                                    self.assertEqual(response.status, 200)
-                                    self.assertEqual(response.headers.get_content_type(), content_type)
-                                    self.assertTrue(response.read())
+                            with self.subTest(prefix=prefix, path=path), urlopen(urljoin(root, path), timeout=5) as response:
+                                self.assertEqual(response.status, 200)
+                                self.assertEqual(response.headers.get_content_type(), content_type)
+                                self.assertTrue(response.read())
                 finally:
                     server.shutdown()
                     thread.join(timeout=5)

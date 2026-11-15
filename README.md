@@ -103,18 +103,23 @@ Có thể xem trang cục bộ bằng `python -m http.server 8000 --directory pa
 
 ---
 
-## ▲ Triển khai trang giới thiệu lên Vercel
+## ▲ Triển khai JARVIS trên web (Vercel)
 
-Trang [`pages/`](pages/) là HTML/CSS tĩnh. [`vercel.json`](vercel.json) cấu hình Vercel xuất bản thư mục này thay vì trang tunnel cũ ở thư mục gốc; không cần build, biến môi trường hay cơ sở dữ liệu Supabase.
+Bản web tại [jarvis-ai-agent-nine.vercel.app](https://jarvis-ai-agent-nine.vercel.app/) dùng giao diện [`web/`](web/) và API [`api/chat.py`](api/chat.py), kết nối **mô hình AI thật** qua `OpenAICompatProvider` của JARVIS v4 và Vercel AI Gateway. Có hội thoại nhiều lượt, lưu ngữ cảnh trong tab và tùy chọn giọng nói do trình duyệt hỗ trợ. Đây là **phiên bản chat trên cloud**, không phải toàn bộ ứng dụng Windows: không truy cập màn hình/tệp, chạy lệnh, duyệt web hay điều khiển PC. GitHub Pages vẫn là trang giới thiệu trong `pages/`.
 
-1. Trong [Vercel](https://vercel.com/xuankhanh1612s-projects), chọn **Add New → Project** và import `xuankhanh1612/jarvis-ai-agent`.
-2. Giữ **Root Directory** ở thư mục gốc repository và chọn **Framework Preset: Other**. Bật Override cho Build Command rồi để trống; không cần Install Command.
-3. Đặt **Output Directory** thành `pages` (bật Override). Cài đặt này đặc biệt cần thiết nếu import `main` trước khi thay đổi chứa `vercel.json` được gộp vào `main`.
-4. Chọn **Deploy**. Nếu Git deployments được bật trong cài đặt project, các cập nhật sau trên nhánh production sẽ được Vercel tự triển khai.
+### Cấu hình Vercel
 
-Nếu gặp `PYTHON_ENTRYPOINT_NOT_FOUND`, hãy đổi Framework Preset từ Python sang **Other** và deploy lại; không dùng entrypoint được gợi ý từ thư mục `tests/`.
+1. Import `xuankhanh1612/jarvis-ai-agent` vào [Vercel](https://vercel.com/xuankhanh1612s-projects), giữ Root Directory ở gốc repository. [`vercel.json`](vercel.json) chọn cấu hình không framework, chỉ phục vụ tĩnh `web/` và triển khai Python Function `/api/chat`. Phụ thuộc nhẹ của API nằm riêng trong [`api/requirements.txt`](api/requirements.txt); không cài bộ phụ thuộc Windows trên Vercel.
+2. Trong **Project → Settings → Environment Variables**, tạo `JARVIS_ACCESS_KEY` cho **Production** và **Preview**. Giá trị phải là chuỗi ngẫu nhiên khó đoán, tối thiểu 32 ký tự ASCII không có khoảng trắng. Có thể tự tạo trên máy bằng `python -c "import secrets; print(secrets.token_urlsafe(32))"` rồi lưu bằng trình quản lý mật khẩu; **không gửi khóa trong chat hoặc commit vào Git**. Người dùng nhập chính khóa đó trên trang web. Khi thiếu khóa hợp lệ, API từ chối mọi yêu cầu.
+3. Bật **OIDC token** cho project để hàm Vercel tự xác thực tới AI Gateway. Tùy chọn: dùng `AI_GATEWAY_API_KEY` trong biến môi trường an toàn thay cho OIDC, đặc biệt khi chạy cục bộ. Không đưa token vào mã nguồn hoặc trình duyệt.
+4. Redeploy sau khi thay đổi biến môi trường. Bản mặc định gọi `reflection/beam-free`, một mô hình được niêm yết miễn phí tại thời điểm triển khai; hạn mức, tính sẵn có và điều khoản có thể thay đổi. Kiểm tra [AI Gateway](https://vercel.com/docs/ai-gateway/pricing) và giới hạn chi tiêu/Firewall của Vercel trước khi chia sẻ quyền truy cập. Gateway có thể yêu cầu xác minh tài khoản hoặc phương thức thanh toán tùy chính sách.
+5. Mở trang web, nhập khóa ở bước 2 và gửi một câu hỏi để kiểm tra phản hồi từ mô hình. Nếu Git deployments được bật, các thay đổi sau trên nhánh production sẽ tự triển khai.
 
-Vercel chỉ phục vụ trang giới thiệu; ứng dụng JARVIS v4 vẫn cần chạy trên Windows. Không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai. Supabase không biến ứng dụng Windows thành backend web và không cần thiết cho trang tĩnh này.
+Hội thoại được lưu trong `sessionStorage` của tab và gửi tới Vercel AI Gateway cùng nhà cung cấp mô hình mỗi khi bạn gửi tin nhắn; không gửi thông tin nhạy cảm. Ứng dụng chỉ giữ khóa trong bộ nhớ trang cho đến khi khóa lại/tải lại; trình duyệt hoặc trình quản lý mật khẩu có thể lưu khóa nếu bạn chọn. Nhận dạng giọng nói (nếu được bật) do trình duyệt cung cấp và có thể gửi âm thanh tới dịch vụ của trình duyệt. Không có lưu trữ server-side hoặc Supabase trong phiên bản này.
+
+Chạy giao diện/API cục bộ: cài `python -m pip install -r api/requirements.txt`, đặt `JARVIS_ACCESS_KEY` và `AI_GATEWAY_API_KEY` trong môi trường của bạn, rồi chạy `python scripts/web_dev.py`. Không công khai server phát triển. Kiểm thử: `python -m unittest discover -s tests -p 'test_web.py'`.
+
+Không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai.
 
 ---
 

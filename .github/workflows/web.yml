@@ -1,0 +1,26 @@
+name: Test JARVIS cloud web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install web API dependencies
+        run: python -m pip install -r api/requirements.txt
+      - name: Test cloud chat and GitHub Pages
+        run: |
+          python -m unittest discover -s tests -p 'test_web.py' -v
+          python -m unittest discover -s tests -p 'test_pages.py' -v
