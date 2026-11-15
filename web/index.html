@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0c13">
+  <meta name="description" content="Trò chuyện với JARVIS trên web thông qua mô hình AI đám mây.">
+  <title>JARVIS — Trợ lý AI của bạn</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Chuyển tới nội dung chính</a>
+  <div class="app-shell" id="app-shell" inert>
+    <aside class="sidebar" aria-label="Điều hướng chính">
+      <a class="brand" href="./">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5 26.8 9.7v12.6L16 28.5 5.2 22.3V9.7L16 3.5Z" stroke="currentColor" stroke-width="1.5"/><path d="M21 10.5v7.1c0 3.1-1.8 4.9-4.8 4.9-2.2 0-3.7-1-4.2-2.8M10.8 10.5H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="brand-word">JARVIS<span class="brand-dot">.</span><small>AI ASSISTANT</small></span>
+      </a>
+      <div class="side-label">KHÔNG GIAN LÀM VIỆC</div>
+      <div class="nav-active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5.5h14v10H9l-4 3v-13Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 9.5h7M8.5 12h4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Trò chuyện</span><span class="active-dot" aria-hidden="true"></span></div>
+      <button class="side-action" id="new-chat" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Cuộc trò chuyện mới</button>
+      <div class="side-separator"></div>
+      <div class="side-label">KHÁM PHÁ</div>
+      <a class="side-link" href="https://github.com/xuankhanh1612/jarvis-ai-agent" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 5H5v14h14v-3M13 5h6v6M19 5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Mã nguồn <span aria-hidden="true">↗</span></a>
+      <a class="side-link" href="https://github.com/xuankhanh1612/jarvis-ai-agent/blob/main/docs/JARVIS_V4.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4.5h9l3 3V20H6V4.5ZM14.5 4.5v3.5H18M9 12h6M9 15h6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>Ứng dụng Windows <span aria-hidden="true">↗</span></a>
+      <div class="sidebar-bottom">
+        <div class="version-card"><span class="version-icon" aria-hidden="true">✦</span><div><strong>JARVIS trên web</strong><small>Trợ lý AI trong trình duyệt</small></div></div>
+        <span class="side-foot">ĐƯỢC TẠO ĐỂ GIÚP BẠN TẬP TRUNG</span>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="topbar-title"><span class="mobile-brand" aria-hidden="true">J<span>.</span></span><div><span class="crumb">KHÔNG GIAN LÀM VIỆC <span>/</span></span><strong>Trò chuyện</strong></div></div>
+        <div class="topbar-actions"><span class="status-pill" id="status-pill"><span class="status-dot" aria-hidden="true"></span><span id="connection-status">Đang khóa</span></span><button class="icon-button mobile-new" id="new-chat-mobile" type="button" aria-label="Cuộc trò chuyện mới" title="Cuộc trò chuyện mới"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button class="icon-button lock-button" id="lock" type="button" aria-label="Khóa phiên" title="Khóa phiên"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5.5" y="10" width="13" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8.5 10V7a3.5 3.5 0 1 1 7 0v3M12 14v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
+      </header>
+      <main class="main-content" id="main-content">
+        <div class="thread-scroll" id="thread-scroll">
+          <section class="welcome" id="welcome" aria-labelledby="welcome-title">
+            <div class="orb-stage" aria-hidden="true"><div class="orbit orbit-outer"></div><div class="orbit orbit-middle"></div><div class="orbit orbit-inner"></div><div class="orb-core"><span></span></div><i class="spark spark-one"></i><i class="spark spark-two"></i><i class="spark spark-three"></i></div>
+            <div class="welcome-kicker"><span></span> TRỢ LÝ CỦA BẠN, LUÔN SẴN SÀNG</div>
+            <h1 id="welcome-title">Xin chào, tôi là <span>JARVIS.</span></h1>
+            <p>Từ một ý tưởng nhỏ đến những câu hỏi lớn —<br class="desktop-break"> hãy cùng bắt đầu cuộc trò chuyện.</p>
+            <div class="suggestion-heading"><span></span> BẠN CÓ THỂ THỬ <span></span></div>
+            <div class="suggestions" role="group" aria-label="Gợi ý bắt đầu">
+              <button class="suggestion" type="button" data-prompt="Giúp tôi lập một kế hoạch làm việc hiệu quả cho tuần này."><span class="suggestion-icon violet" aria-hidden="true">✳</span><strong>Lên kế hoạch</strong><small>Tổ chức một tuần hiệu quả</small><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+              <button class="suggestion" type="button" data-prompt="Giải thích trí tuệ nhân tạo cho tôi một cách dễ hiểu, kèm ví dụ."><span class="suggestion-icon cyan" aria-hidden="true">◇</span><strong>Khám phá ý tưởng</strong><small>Biến điều phức tạp thành dễ hiểu</small><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+              <button class="suggestion" type="button" data-prompt="Giúp tôi viết một email chuyên nghiệp. Hãy hỏi tôi những thông tin cần thiết trước."><span class="suggestion-icon amber" aria-hidden="true">✎</span><strong>Viết cùng nhau</strong><small>Soạn thảo từ trang giấy trắng</small><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+            </div>
+          </section>
+          <section class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Nội dung trò chuyện"></section>
+          <div class="reply-status" id="reply-status" role="status" aria-live="polite" hidden></div>
+        </div>
+        <div class="composer-wrap">
+          <form class="composer" id="chat-form">
+            <label class="sr-only" for="message-input">Tin nhắn gửi JARVIS</label>
+            <textarea id="message-input" rows="1" maxlength="4000" placeholder="Nhắn tin cho JARVIS..." required></textarea>
+            <div class="composer-actions"><div class="composer-left"><span class="composer-hint">Enter để gửi <span>·</span> Shift + Enter để xuống dòng</span><button class="mic-button" id="mic" type="button" aria-label="Nhập bằng giọng nói" title="Nhập bằng giọng nói"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>Giọng nói</span></button></div><button class="send-button" id="send" type="submit"><span>Gửi</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 14-7-5.5 14-2.3-5.2L5 12ZM11.2 13.8 19 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+          </form>
+          <div class="composer-footer"><span>JARVIS có thể mắc lỗi. Hãy kiểm tra thông tin quan trọng.</span><span class="footer-secure"><span aria-hidden="true">◇</span> Lịch sử lưu trong tab này</span></div>
+        </div>
+      </main>
+    </div>
+
+    <aside class="context-panel" aria-label="Thông tin phiên">
+      <div class="context-header">TỔNG QUAN <span>01</span></div>
+      <div class="context-card assistant-card"><div class="card-top"><span class="tiny-mark" aria-hidden="true">✦</span><span class="live-label">CLOUD CHAT</span></div><h2>Một chút về<br>JARVIS.</h2><p>Người đồng hành để suy nghĩ rõ hơn, sáng tạo nhiều hơn và hoàn thành việc của bạn.</p><div class="card-line"></div><div class="card-stat"><span>TRẠNG THÁI</span><strong id="panel-status">Đang khóa</strong></div><div class="card-stat"><span>NHÀ CUNG CẤP</span><strong>Google Gemini</strong></div></div>
+      <div class="context-title">TRONG PHIÊN BẢN NÀY</div>
+      <div class="capability"><span class="cap-icon" aria-hidden="true">✦</span><div><strong>Trò chuyện với AI</strong><small>Hỏi đáp, viết và lên ý tưởng</small></div></div>
+      <div class="capability"><span class="cap-icon" aria-hidden="true">◷</span><div><strong>Giữ ngữ cảnh</strong><small>Trong phiên của tab hiện tại</small></div></div>
+      <div class="context-note"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5 19 6v5.4c0 4.3-2.9 7.4-7 9.1-4.1-1.7-7-4.8-7-9.1V6l7-2.5Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 8v4m0 3h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><p><strong>Quyền riêng tư &amp; giới hạn</strong><br>Tin nhắn đi qua Vercel tới Google Gemini. Ở gói miễn phí, Google có thể dùng nội dung để cải thiện sản phẩm. Không gửi thông tin nhạy cảm. Bản web không điều khiển máy Windows.</p></div>
+      <div class="context-bottom"><span class="context-bottom-dot"></span> THIẾT KẾ CHO NHỮNG Ý TƯỞNG LỚN</div>
+    </aside>
+  </div>
+
+  <div class="lock-overlay" id="lock-overlay" role="dialog" aria-modal="true" aria-labelledby="lock-title" aria-describedby="lock-description">
+    <div class="lock-card"><div class="lock-emblem" aria-hidden="true"><span>✦</span></div><div class="lock-kicker">JARVIS / CLOUD CHAT</div><h2 id="lock-title">Mở khóa không gian<br>của bạn.</h2><p id="lock-description">Nhập khóa truy cập do chủ sở hữu triển khai thiết lập để bắt đầu trò chuyện.</p>
+      <form id="unlock-form"><label for="access-key">KHÓA TRUY CẬP</label><div class="key-field"><input id="access-key" type="password" autocomplete="current-password" spellcheck="false" required placeholder="Nhập khóa truy cập" maxlength="512"><button id="show-key" type="button" aria-label="Hiện khóa truy cập" aria-pressed="false">Hiện</button></div><p class="form-error" id="unlock-error" role="alert" hidden></p><button class="unlock-button" id="unlock-button" type="submit">Tiếp tục <span aria-hidden="true">↗</span></button></form>
+      <p class="lock-foot"><span aria-hidden="true">◇</span> Ứng dụng không lưu khóa; trình duyệt có thể lưu nếu bạn chọn. Tin nhắn đi qua Vercel tới Google Gemini; Google có thể dùng nội dung gói miễn phí để cải thiện sản phẩm. Không gửi thông tin nhạy cảm. Nếu dùng giọng nói, trình duyệt có thể gửi âm thanh tới dịch vụ nhận dạng của nó.</p><a class="setup-link" href="https://github.com/xuankhanh1612/jarvis-ai-agent#-triển-khai-jarvis-trên-web-vercel" target="_blank" rel="noopener noreferrer">Hướng dẫn thiết lập <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+</body>
+</html>

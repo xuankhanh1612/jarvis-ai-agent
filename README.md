@@ -99,22 +99,27 @@ Workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) xuất b�
 
 Có thể xem trang cục bộ bằng `python -m http.server 8000 --directory pages` và mở `http://localhost:8000/`.
 
-> GitHub Pages chỉ phục vụ trang giới thiệu tĩnh; nó không chạy ứng dụng Python/Windows, AI, giọng nói hay điều khiển máy tính. Hãy cài JARVIS v4 trên Windows theo [hướng dẫn đầy đủ](docs/JARVIS_V4.md). Đặc biệt, không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai.
+> GitHub Pages chỉ phục vụ trang giới thiệu tĩnh; nó không chạy ứng dụng Python/Windows, AI, giọng nói hay điều khiển máy tính. Hãy cài JARVIS v4 trên Windows theo [hướng dẫn đầy đủ](docs/JARVIS_V4.md), hoặc dùng bản chat web riêng sau khi cấu hình bên dưới. Đặc biệt, không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai.
 
 ---
 
-## ▲ Triển khai trang giới thiệu lên Vercel
+## ▲ Triển khai JARVIS trên web (Vercel)
 
-Trang [`pages/`](pages/) là HTML/CSS tĩnh. [`vercel.json`](vercel.json) cấu hình Vercel xuất bản thư mục này thay vì trang tunnel cũ ở thư mục gốc; không cần build, biến môi trường hay cơ sở dữ liệu Supabase.
+Bản web tại [jarvis-ai-agent-nine.vercel.app](https://jarvis-ai-agent-nine.vercel.app/) dùng giao diện [`web/`](web/) và API [`api/chat.py`](api/chat.py), kết nối **Google Gemini** qua `OpenAICompatProvider` của JARVIS v4 sau khi triển khai và cấu hình khóa. Có hội thoại nhiều lượt, lưu ngữ cảnh trong tab và tùy chọn giọng nói do trình duyệt hỗ trợ. Đây là **phiên bản chat trên cloud**, không phải toàn bộ ứng dụng Windows: không truy cập màn hình/tệp, chạy lệnh, duyệt web hay điều khiển PC. GitHub Pages vẫn là trang giới thiệu trong `pages/`.
 
-1. Trong [Vercel](https://vercel.com/xuankhanh1612s-projects), chọn **Add New → Project** và import `xuankhanh1612/jarvis-ai-agent`.
-2. Giữ **Root Directory** ở thư mục gốc repository và chọn **Framework Preset: Other**. Bật Override cho Build Command rồi để trống; không cần Install Command.
-3. Đặt **Output Directory** thành `pages` (bật Override). Cài đặt này đặc biệt cần thiết nếu import `main` trước khi thay đổi chứa `vercel.json` được gộp vào `main`.
-4. Chọn **Deploy**. Nếu Git deployments được bật trong cài đặt project, các cập nhật sau trên nhánh production sẽ được Vercel tự triển khai.
+### Cấu hình Vercel
 
-Nếu gặp `PYTHON_ENTRYPOINT_NOT_FOUND`, hãy đổi Framework Preset từ Python sang **Other** và deploy lại; không dùng entrypoint được gợi ý từ thư mục `tests/`.
+1. Import `xuankhanh1612/jarvis-ai-agent` vào [Vercel](https://vercel.com/xuankhanh1612s-projects), giữ Root Directory ở gốc repository. [`vercel.json`](vercel.json) chọn cấu hình không framework, chỉ phục vụ tĩnh `web/` và triển khai Python Function `/api/chat`. Phụ thuộc nhẹ của API nằm riêng trong [`api/requirements.txt`](api/requirements.txt); không cài bộ phụ thuộc Windows trên Vercel.
+2. Trong [Google AI Studio](https://aistudio.google.com/api-keys), tạo một Gemini API key cho dự án của bạn. Trong **Vercel Project → Settings → Environment Variables**, tạo `GEMINI_API_KEY` với giá trị đó cho **Production** và **Preview**; chọn loại **Secret** (hoặc **Sensitive**) nếu có. Khóa này chỉ nằm trên máy chủ, không nhập vào giao diện chat.
+3. Tại cùng trang Vercel, tạo thêm `JARVIS_ACCESS_KEY` loại **Secret** cho **Production** và **Preview**. Đây là khóa *riêng*, khác Gemini API key, dùng để mở trang chat. Giá trị phải ngẫu nhiên, khó đoán, tối thiểu 32 ký tự ASCII không có khoảng trắng. Có thể tự tạo trên máy bằng `python -c "import secrets; print(secrets.token_urlsafe(32))"` rồi lưu bằng trình quản lý mật khẩu trước khi thêm vào Vercel. Chỉ nhập khóa này vào trang chat. Nếu thiếu khóa an toàn, API từ chối mọi yêu cầu. **Không gửi cả hai khóa qua chat hoặc commit vào Git.**
+4. Redeploy sau khi thay đổi biến môi trường. Ứng dụng mặc định gọi `gemini-3.5-flash-lite`; Google có [gói miễn phí](https://ai.google.dev/gemini-api/docs/pricing) cho mô hình này đối với dự án đủ điều kiện, nhưng hạn mức và tính sẵn có có thể thay đổi. Dự án Google đã bật thanh toán có thể bị tính phí; tài nguyên Vercel cũng có hạn mức/chi phí riêng. Kiểm tra dự án, chính sách thanh toán và [hạn mức Gemini](https://ai.google.dev/gemini-api/docs/rate-limits). Ứng dụng chưa có giới hạn tần suất riêng: chỉ chia sẻ khóa truy cập với người tin cậy và dùng Firewall/giới hạn chi tiêu phù hợp trước khi sử dụng rộng rãi.
+5. Mở trang web đã triển khai, nhập `JARVIS_ACCESS_KEY` và gửi một câu hỏi để kiểm tra phản hồi từ mô hình. Nếu Git deployments được bật, các thay đổi sau trên nhánh production sẽ tự triển khai.
 
-Vercel chỉ phục vụ trang giới thiệu; ứng dụng JARVIS v4 vẫn cần chạy trên Windows. Không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai. Supabase không biến ứng dụng Windows thành backend web và không cần thiết cho trang tĩnh này.
+Hội thoại được lưu trong `sessionStorage` của tab và đi qua máy chủ Vercel tới Google Gemini mỗi khi bạn gửi tin nhắn. Theo [chính sách giá của Google](https://ai.google.dev/gemini-api/docs/pricing), nội dung ở gói miễn phí có thể được dùng để cải thiện sản phẩm; không gửi thông tin nhạy cảm. Ứng dụng chỉ giữ khóa truy cập trong bộ nhớ trang cho đến khi khóa lại/tải lại; trình duyệt hoặc trình quản lý mật khẩu có thể lưu khóa nếu bạn chọn. Nhận dạng giọng nói (nếu được bật) do trình duyệt cung cấp và có thể gửi âm thanh tới dịch vụ của trình duyệt. Không có lưu trữ server-side hoặc Supabase trong phiên bản này.
+
+Chạy giao diện/API cục bộ: cài `python -m pip install -r api/requirements.txt`, đặt `JARVIS_ACCESS_KEY` và `GEMINI_API_KEY` trong môi trường của bạn, rồi chạy `python scripts/web_dev.py`. Không công khai server phát triển. Kiểm thử: `python -m unittest discover -s tests -p 'test_web.py'`.
+
+Không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai.
 
 ---
 
