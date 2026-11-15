@@ -20,4 +20,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run Test Suite
-        run: pytest -v --tb=short
+        run: pytest -v --tb=short --junitxml=pytest-results.xml
+      - name: Annotate test failures
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path pytest-results.xml) {
+            [xml]$report = Get-Content pytest-results.xml -Raw
+            $failures = $report.SelectNodes('//testcase[failure or error]') | Select-Object -First 25
+            foreach ($case in $failures) {
+              $problem = $case.SelectSingleNode('failure|error')
+              $details = "$($case.classname).$($case.name): $($problem.InnerText)"
+              if ($details.Length -gt 1800) { $details = $details.Substring(0, 1800) }
+              $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error::$details"
+            }
+          }
