@@ -1,6 +1,6 @@
 """Local development server for the cloud chat UI and its Vercel handler.
 
-Set JARVIS_ACCESS_KEY and AI_GATEWAY_API_KEY in the environment first. Bind to
+Set JARVIS_ACCESS_KEY and GEMINI_API_KEY in the environment first. Bind to
 0.0.0.0 so an Arena preview works; do not use this development server for
 production or expose it without the access key.
 """

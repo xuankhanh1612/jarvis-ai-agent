@@ -13,7 +13,6 @@ import hmac
 import json
 import logging
 import os
-from email.message import Message
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlsplit
 
@@ -23,15 +22,15 @@ from jarvis.providers.openai_compat import OpenAICompatProvider
 
 log = logging.getLogger(__name__)
 
-# A distinct free-inference model, rather than a paid model using free credits.
-# Its availability and provider terms may change independently of this app.
-MODEL = "reflection/beam-free"
-GATEWAY_URL = "https://ai-gateway.vercel.sh/v1"
+# Google's stable Flash-Lite model offers a free tier for eligible projects.
+# Paid projects may be billed; availability and quota can change.
+MODEL = "gemini-3.5-flash-lite"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 MAX_BODY_BYTES = 48 * 1024
 MAX_MESSAGES = 24
 MAX_MESSAGE_CHARS = 4000
 MAX_TOTAL_CHARS = 20000
-MAX_OUTPUT_TOKENS = 1024
+MAX_OUTPUT_TOKENS = 2048
 PROVIDER_TIMEOUT = 45.0
 
 WEB_RULES = (
@@ -71,29 +70,9 @@ def _authorized(header: str, configured: str) -> bool:
     return hmac.compare_digest(supplied, expected)
 
 
-def _gateway_credential(headers: Message) -> str | None:
-    # An explicit API key wins. Vercel supplies its rotating OIDC token in each
-    # function request, while `vercel env pull` supplies an env var locally.
-    api_key = os.environ.get("AI_GATEWAY_API_KEY")
-    if api_key:
-        return api_key
-    if os.environ.get("VERCEL") == "1" and os.environ.get("VERCEL_ENV") != "development":
-        return headers.get("x-vercel-oidc-token") or None
-    return os.environ.get("VERCEL_OIDC_TOKEN") or None
-
-
-class GatewayProvider(OpenAICompatProvider):
-    """Pass the request's short-lived credential without mutating process env."""
-
-    def __init__(self, credential: str) -> None:
-        super().__init__("vercel-gateway", {
-            "base_url": GATEWAY_URL,
-            "max_tokens_field": "max_tokens",
-        })
-        self._gateway_credential = credential
-
-    def _key(self) -> str:
-        return self._gateway_credential
+def _gemini_key_configured() -> bool:
+    key = os.environ.get("GEMINI_API_KEY", "")
+    return bool(key) and all(32 < ord(char) < 127 for char in key)
 
 
 def _messages_from_body(body: object) -> list[dict[str, str]]:
@@ -161,10 +140,11 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
     def do_GET(self) -> None:  # noqa: N802
         if not self._check_access():
             return
-        if not _gateway_credential(self.headers):
-            self._json(503, {"error": "AI Gateway chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
+        if not _gemini_key_configured():
+            self._json(503, {"error": "Gemini chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
             return
-        self._json(200, {"ok": True, "model": MODEL, "provider": "Vercel AI Gateway"})
+        # This confirms configuration is present, not that the model is reachable.
+        self._json(200, {"ok": True, "model": MODEL, "provider": "Google Gemini"})
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._check_access():
@@ -185,11 +165,14 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             self._json(400, {"error": "Nội dung hoặc lịch sử trò chuyện không hợp lệ.", "code": "invalid_messages"})
             return
-        credential = _gateway_credential(self.headers)
-        if credential is None:
-            self._json(503, {"error": "AI Gateway chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
+        if not _gemini_key_configured():
+            self._json(503, {"error": "Gemini chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
             return
-        provider = GatewayProvider(credential)
+        provider = OpenAICompatProvider("gemini", {
+            "base_url": GEMINI_URL,
+            "secret": "GEMINI_API_KEY",
+            "max_tokens_field": "max_tokens",
+        })
         try:
             result = provider.chat(
                 [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
@@ -209,14 +192,14 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
             return
         except ProviderError as exc:
             # Provider responses may contain sensitive details; do not echo them.
-            log.warning("AI Gateway request failed")
+            log.warning("Gemini request failed")
             if not exc.retryable:
-                self._json(502, {"error": "AI Gateway từ chối truy cập. Hãy kiểm tra xác minh tài khoản, cấu hình và quyền sử dụng mô hình.", "code": "provider_access_denied"})
+                self._json(502, {"error": "Gemini từ chối truy cập. Hãy kiểm tra khóa API và quyền sử dụng mô hình.", "code": "provider_access_denied"})
             else:
-                self._json(502, {"error": "Không kết nối được mô hình AI. Kiểm tra AI Gateway hoặc thử lại sau.", "code": "provider_error"})
+                self._json(502, {"error": "Không kết nối được Gemini. Hãy kiểm tra cấu hình hoặc thử lại sau.", "code": "provider_error"})
             return
         except Exception:  # noqa: BLE001 - don't leak credentials or provider details
-            log.warning("Unexpected AI Gateway failure")
+            log.warning("Unexpected Gemini failure")
             self._json(502, {"error": "Không thể nhận phản hồi từ mô hình AI. Hãy thử lại.", "code": "provider_error"})
             return
         self._json(200, {"ok": True, "message": result.text, "model": MODEL})

@@ -84,6 +84,9 @@ class PagesTests(unittest.TestCase):
         content = " ".join(self.parser.text)
         self.assertIn("Windows", content)
         self.assertIn("không chạy trực tiếp trên GitHub Pages hoặc Vercel", content)
+        self.assertIn("bản chat web", content)
+        self.assertIn("không điều khiển máy tính", content)
+        self.assertIn("https://jarvis-ai-agent-nine.vercel.app/", self.parser.references)
         self.assertIn("không có xác thực", content)
         self.assertTrue((SITE / ".nojekyll").is_file())
 
