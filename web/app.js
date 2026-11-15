@@ -201,7 +201,12 @@ async function readResponse(response) {
 
 function lockSession(message = "") {
   generation += 1;
-  if (pendingController) pendingController.abort();
+  if (pendingController) {
+    pendingController.abort();
+    if (messages.length && messages[messages.length - 1].role === "user") {
+      showReplyStatus("Yêu cầu đã dừng. Mở khóa để thử lại.", true, true);
+    }
+  }
   pendingController = null;
   if (recognition) { try { recognition.abort(); } catch (_) { /* already stopped */ } }
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();

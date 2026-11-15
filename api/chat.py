@@ -13,6 +13,7 @@ import hmac
 import json
 import logging
 import os
+from email.message import Message
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlsplit
 
@@ -70,12 +71,29 @@ def _authorized(header: str, configured: str) -> bool:
     return hmac.compare_digest(supplied, expected)
 
 
-def _gateway_secret_name() -> str | None:
-    if os.environ.get("AI_GATEWAY_API_KEY"):
-        return "AI_GATEWAY_API_KEY"
-    if os.environ.get("VERCEL_OIDC_TOKEN"):
-        return "VERCEL_OIDC_TOKEN"
-    return None
+def _gateway_credential(headers: Message) -> str | None:
+    # An explicit API key wins. Vercel supplies its rotating OIDC token in each
+    # function request, while `vercel env pull` supplies an env var locally.
+    api_key = os.environ.get("AI_GATEWAY_API_KEY")
+    if api_key:
+        return api_key
+    if os.environ.get("VERCEL") == "1" and os.environ.get("VERCEL_ENV") != "development":
+        return headers.get("x-vercel-oidc-token") or None
+    return os.environ.get("VERCEL_OIDC_TOKEN") or None
+
+
+class GatewayProvider(OpenAICompatProvider):
+    """Pass the request's short-lived credential without mutating process env."""
+
+    def __init__(self, credential: str) -> None:
+        super().__init__("vercel-gateway", {
+            "base_url": GATEWAY_URL,
+            "max_tokens_field": "max_tokens",
+        })
+        self._gateway_credential = credential
+
+    def _key(self) -> str:
+        return self._gateway_credential
 
 
 def _messages_from_body(body: object) -> list[dict[str, str]]:
@@ -143,7 +161,7 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
     def do_GET(self) -> None:  # noqa: N802
         if not self._check_access():
             return
-        if not _gateway_secret_name():
+        if not _gateway_credential(self.headers):
             self._json(503, {"error": "AI Gateway chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
             return
         self._json(200, {"ok": True, "model": MODEL, "provider": "Vercel AI Gateway"})
@@ -167,15 +185,11 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             self._json(400, {"error": "Nội dung hoặc lịch sử trò chuyện không hợp lệ.", "code": "invalid_messages"})
             return
-        secret_name = _gateway_secret_name()
-        if secret_name is None:
+        credential = _gateway_credential(self.headers)
+        if credential is None:
             self._json(503, {"error": "AI Gateway chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
             return
-        provider = OpenAICompatProvider("vercel-gateway", {
-            "base_url": GATEWAY_URL,
-            "secret": secret_name,
-            "max_tokens_field": "max_tokens",
-        })
+        provider = GatewayProvider(credential)
         try:
             result = provider.chat(
                 [{"role": "system", "content": SYSTEM_PROMPT}, *messages],

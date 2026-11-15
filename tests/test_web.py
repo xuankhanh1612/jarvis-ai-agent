@@ -60,7 +60,7 @@ class CloudWebTests(unittest.TestCase):
     def test_missing_or_short_access_key_fails_closed_without_model_call(self):
         for key in ("", "too-short"):
             with self.subTest(key=key), patch.dict(os.environ, {"JARVIS_ACCESS_KEY": key, "AI_GATEWAY_API_KEY": TOKEN}, clear=True):
-                with patch("api.chat.OpenAICompatProvider") as provider:
+                with patch("api.chat.GatewayProvider") as provider:
                     status, _, body = self.post({"messages": [{"role": "user", "content": "Hi"}]})
                 self.assertEqual(status, 503)
                 self.assertEqual(json.loads(body)["code"], "access_not_configured")
@@ -69,7 +69,7 @@ class CloudWebTests(unittest.TestCase):
     def test_invalid_key_rejected_before_any_model_call(self):
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "AI_GATEWAY_API_KEY": TOKEN}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GatewayProvider") as provider,
         ):
             status, headers, body = self.post({"messages": [{"role": "user", "content": "Hi"}]}, key="wrong")
         self.assertEqual(status, 401)
@@ -82,12 +82,47 @@ class CloudWebTests(unittest.TestCase):
         with patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY}, clear=True):
             status, _, body = self.request("GET", headers=self.auth_headers())
             self.assertEqual((status, json.loads(body)["code"]), (503, "model_not_configured"))
+            # A client-supplied OIDC header outside Vercel must not be trusted.
+            status, _, body = self.request("GET", headers={**self.auth_headers(), "x-vercel-oidc-token": TOKEN})
+            self.assertEqual((status, json.loads(body)["code"]), (503, "model_not_configured"))
         with patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "VERCEL_OIDC_TOKEN": TOKEN}, clear=True):
             status, _, body = self.request("GET", headers=self.auth_headers())
             self.assertEqual(status, 200)
             result = json.loads(body)
             self.assertEqual(result["model"], chat.MODEL)
             self.assertNotIn(TOKEN.encode(), body)
+        with patch.dict(os.environ, {
+            "JARVIS_ACCESS_KEY": ACCESS_KEY, "VERCEL": "1", "VERCEL_ENV": "preview", "VERCEL_OIDC_TOKEN": "stale"
+        }, clear=True):
+            # Build-time tokens aren't valid substitutes for the per-request token.
+            status, _, body = self.request("GET", headers=self.auth_headers())
+            self.assertEqual((status, json.loads(body)["code"]), (503, "model_not_configured"))
+            status, _, body = self.request("GET", headers={**self.auth_headers(), "x-vercel-oidc-token": TOKEN})
+            self.assertEqual(status, 200)
+            self.assertNotIn(TOKEN.encode(), body)
+
+    def test_vercel_uses_rotating_request_oidc_tokens_and_api_key_takes_precedence(self):
+        event = {"choices": [{"delta": {"content": "OK"}}]}
+        sse = ("data: " + json.dumps(event) + "\n\ndata: [DONE]\n\n").encode()
+        response = httpx.Response(200, content=sse, headers={"content-type": "text/event-stream"})
+        env = {"JARVIS_ACCESS_KEY": ACCESS_KEY, "VERCEL": "1", "VERCEL_ENV": "preview"}
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("jarvis.providers.openai_compat.httpx.stream", return_value=nullcontext(response)) as stream,
+        ):
+            for token in (TOKEN, "second-request-token"):
+                status, _, body = self.post({"messages": [{"role": "user", "content": "Hi"}]}, **{"x-vercel-oidc-token": token})
+                self.assertEqual(status, 200)
+                self.assertNotIn(token.encode(), body)
+            self.assertEqual(
+                [call.kwargs["headers"]["Authorization"] for call in stream.call_args_list],
+                ["Bearer " + TOKEN, "Bearer second-request-token"],
+            )
+            self.assertNotIn("VERCEL_OIDC_TOKEN", os.environ)
+            with patch.dict(os.environ, {"AI_GATEWAY_API_KEY": "explicit-key"}):
+                status, _, _ = self.post({"messages": [{"role": "user", "content": "Hi"}]}, **{"x-vercel-oidc-token": TOKEN})
+                self.assertEqual(status, 200)
+                self.assertEqual(stream.call_args.kwargs["headers"]["Authorization"], "Bearer explicit-key")
 
     def test_cross_origin_and_non_json_requests_are_rejected(self):
         with patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "AI_GATEWAY_API_KEY": TOKEN}, clear=True):
@@ -97,7 +132,7 @@ class CloudWebTests(unittest.TestCase):
             self.assertEqual(status, 403)
             status, _, _ = self.request("POST", body=b"{}", headers={**self.auth_headers(), "Content-Type": "text/plain"})
             self.assertEqual(status, 415)
-            with patch("api.chat.OpenAICompatProvider") as provider:
+            with patch("api.chat.GatewayProvider") as provider:
                 provider.return_value.chat.return_value = ChatResult(
                     text="Hello", tool_calls=[], provider="test", model=chat.MODEL
                 )
@@ -117,7 +152,7 @@ class CloudWebTests(unittest.TestCase):
         ]
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "AI_GATEWAY_API_KEY": TOKEN}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GatewayProvider") as provider,
         ):
             for payload in bad_payloads:
                 with self.subTest(payload=str(payload)[:100]):
@@ -135,15 +170,13 @@ class CloudWebTests(unittest.TestCase):
         result = ChatResult(text="Chúng ta bắt đầu nhé.", tool_calls=[], provider="vercel-gateway", model=chat.MODEL)
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "VERCEL_OIDC_TOKEN": TOKEN}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GatewayProvider") as provider,
         ):
             provider.return_value.chat.return_value = result
             status, _, body = self.post({"messages": history})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["message"], result.text)
-        provider.assert_called_once_with("vercel-gateway", {
-            "base_url": chat.GATEWAY_URL, "secret": "VERCEL_OIDC_TOKEN", "max_tokens_field": "max_tokens"
-        })
+        provider.assert_called_once_with(TOKEN)
         args, kwargs = provider.return_value.chat.call_args
         self.assertEqual(args[0][0]["role"], "system")
         self.assertIn("cloud web chat", args[0][0]["content"])
@@ -176,7 +209,7 @@ class CloudWebTests(unittest.TestCase):
     def test_provider_errors_are_sanitized_and_rate_limits_are_reported(self):
         with patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "AI_GATEWAY_API_KEY": TOKEN}, clear=True):
             for error, expected in ((ProviderError("sensitive provider detail " + TOKEN), 502), (RateLimited("private"), 429)):
-                with self.subTest(expected=expected), patch("api.chat.OpenAICompatProvider") as provider:
+                with self.subTest(expected=expected), patch("api.chat.GatewayProvider") as provider:
                     provider.return_value.chat.side_effect = error
                     status, _, body = self.post({"messages": [{"role": "user", "content": "Hi"}]})
                     self.assertEqual(status, expected)
