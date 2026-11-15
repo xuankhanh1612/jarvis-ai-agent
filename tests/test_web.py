@@ -9,6 +9,7 @@ import threading
 import unittest
 from contextlib import nullcontext
 from functools import partial
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,7 +61,7 @@ class CloudWebTests(unittest.TestCase):
     def test_missing_or_short_access_key_fails_closed_without_model_call(self):
         for key in ("", "too-short"):
             with self.subTest(key=key), patch.dict(os.environ, {"JARVIS_ACCESS_KEY": key, "GEMINI_API_KEY": TOKEN}, clear=True):
-                with patch("api.chat.OpenAICompatProvider") as provider:
+                with patch("api.chat.GeminiProvider") as provider:
                     status, _, body = self.post({"messages": [{"role": "user", "content": "Hi"}]})
                 self.assertEqual(status, 503)
                 self.assertEqual(json.loads(body)["code"], "access_not_configured")
@@ -69,7 +70,7 @@ class CloudWebTests(unittest.TestCase):
     def test_invalid_key_rejected_before_any_model_call(self):
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GeminiProvider") as provider,
         ):
             status, headers, body = self.post({"messages": [{"role": "user", "content": "Hi"}]}, key="wrong")
         self.assertEqual(status, 401)
@@ -81,7 +82,7 @@ class CloudWebTests(unittest.TestCase):
     def test_verification_requires_server_gemini_key(self):
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GeminiProvider") as provider,
         ):
             status, _, body = self.request("GET", headers=self.auth_headers())
             self.assertEqual((status, json.loads(body)["code"]), (503, "model_not_configured"))
@@ -110,7 +111,7 @@ class CloudWebTests(unittest.TestCase):
         response = httpx.Response(200, content=sse, headers={"content-type": "text/event-stream"})
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True),
-            patch("jarvis.core.secrets.win32cred", None),
+            patch("jarvis.core.secrets.get", return_value="wrong-desktop-key") as desktop_secrets,
             patch("jarvis.providers.openai_compat.httpx.stream", return_value=nullcontext(response)) as stream,
         ):
             payload = {"messages": [{"role": "user", "content": "Hi"}], "model": "expensive-model", "api_key": "client-key"}
@@ -119,6 +120,7 @@ class CloudWebTests(unittest.TestCase):
         self.assertNotIn(TOKEN.encode(), body)
         self.assertEqual(stream.call_args.kwargs["headers"]["Authorization"], "Bearer " + TOKEN)
         self.assertEqual(stream.call_args.kwargs["json"]["model"], chat.MODEL)
+        desktop_secrets.assert_not_called()
 
     def test_cross_origin_and_non_json_requests_are_rejected(self):
         with patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True):
@@ -128,7 +130,7 @@ class CloudWebTests(unittest.TestCase):
             self.assertEqual(status, 403)
             status, _, _ = self.request("POST", body=b"{}", headers={**self.auth_headers(), "Content-Type": "text/plain"})
             self.assertEqual(status, 415)
-            with patch("api.chat.OpenAICompatProvider") as provider:
+            with patch("api.chat.GeminiProvider") as provider:
                 provider.return_value.chat.return_value = ChatResult(
                     text="Hello", tool_calls=[], provider="test", model=chat.MODEL
                 )
@@ -148,7 +150,7 @@ class CloudWebTests(unittest.TestCase):
         ]
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GeminiProvider") as provider,
         ):
             for payload in bad_payloads:
                 with self.subTest(payload=str(payload)[:100]):
@@ -166,15 +168,13 @@ class CloudWebTests(unittest.TestCase):
         result = ChatResult(text="Chúng ta bắt đầu nhé.", tool_calls=[], provider="gemini", model=chat.MODEL)
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True),
-            patch("api.chat.OpenAICompatProvider") as provider,
+            patch("api.chat.GeminiProvider") as provider,
         ):
             provider.return_value.chat.return_value = result
             status, _, body = self.post({"messages": history})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["message"], result.text)
-        provider.assert_called_once_with("gemini", {
-            "base_url": chat.GEMINI_URL, "secret": "GEMINI_API_KEY", "max_tokens_field": "max_tokens"
-        })
+        provider.assert_called_once_with(TOKEN)
         args, kwargs = provider.return_value.chat.call_args
         self.assertEqual(args[0][0]["role"], "system")
         self.assertIn("cloud web chat", args[0][0]["content"])
@@ -192,7 +192,7 @@ class CloudWebTests(unittest.TestCase):
         response = httpx.Response(200, content=sse, headers={"content-type": "text/event-stream"})
         with (
             patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True),
-            patch("jarvis.core.secrets.win32cred", None),
+            patch("jarvis.core.secrets.get", return_value="wrong-desktop-key") as desktop_secrets,
             patch("jarvis.providers.openai_compat.httpx.stream", return_value=nullcontext(response)) as stream,
         ):
             status, _, body = self.post({"messages": [{"role": "user", "content": "Xin chào"}]})
@@ -204,10 +204,58 @@ class CloudWebTests(unittest.TestCase):
         self.assertEqual(kwargs["json"]["model"], chat.MODEL)
         self.assertEqual(kwargs["json"]["max_tokens"], chat.MAX_OUTPUT_TOKENS)
         self.assertTrue(kwargs["json"]["stream"])
+        desktop_secrets.assert_not_called()
+
+    def test_end_to_end_http_request_and_multichunk_stream(self):
+        class FakeGemini(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass
+
+            def do_POST(self):
+                request_body = self.rfile.read(int(self.headers["Content-Length"]))
+                self.server.captured = (self.path, self.headers.get("Authorization"), json.loads(request_body))
+                chunks = [
+                    {"choices": [{"delta": {"role": "assistant", "content": "Xin "}}]},
+                    {"choices": [{"delta": {"content": "chào!"}, "finish_reason": None}]},
+                    {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                ]
+                response = ("".join("data: " + json.dumps(chunk) + "\n\n" for chunk in chunks)
+                            + "data: [DONE]\n\n").encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+        history = [{"role": "user", "content": "Xin chào"},
+                   {"role": "assistant", "content": "Chào bạn"},
+                   {"role": "user", "content": "Bạn nhớ gì?"}]
+        with ThreadingHTTPServer(("127.0.0.1", 0), FakeGemini) as fake:
+            thread = threading.Thread(target=fake.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with (
+                    patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}, clear=True),
+                    patch.object(chat, "GEMINI_URL", f"http://127.0.0.1:{fake.server_port}"),
+                ):
+                    status, _, body = self.post({"messages": history})
+                path, authorization, payload = fake.captured
+                self.assertEqual((status, json.loads(body)["message"]), (200, "Xin chào!"))
+                self.assertEqual((path, authorization), ("/chat/completions", "Bearer " + TOKEN))
+                self.assertEqual(payload["messages"][1:], history)
+                self.assertEqual(payload["model"], chat.MODEL)
+                self.assertEqual(payload["max_tokens"], chat.MAX_OUTPUT_TOKENS)
+                self.assertTrue(payload["stream"])
+                self.assertNotIn("temperature", payload)
+                self.assertNotIn(ACCESS_KEY, json.dumps(payload))
+                self.assertNotIn(TOKEN.encode(), body)
+            finally:
+                fake.shutdown()
+                thread.join(timeout=5)
 
     def test_real_provider_http_failures_are_sanitized(self):
         env = {"JARVIS_ACCESS_KEY": ACCESS_KEY, "GEMINI_API_KEY": TOKEN}
-        with patch.dict(os.environ, env, clear=True), patch("jarvis.core.secrets.win32cred", None):
+        with patch.dict(os.environ, env, clear=True), patch("jarvis.core.secrets.get", return_value="wrong-desktop-key"):
             for upstream, expected, code in ((401, 502, "provider_access_denied"),
                                              (403, 502, "provider_access_denied"),
                                              (404, 502, "model_unavailable"),
@@ -231,7 +279,7 @@ class CloudWebTests(unittest.TestCase):
                 (RateLimited("private"), 429, "rate_limited"),
             )
             for error, expected, code in errors:
-                with self.subTest(code=code), patch("api.chat.OpenAICompatProvider") as provider:
+                with self.subTest(code=code), patch("api.chat.GeminiProvider") as provider:
                     provider.return_value.chat.side_effect = error
                     status, _, body = self.post({"messages": [{"role": "user", "content": "Hi"}]})
                     self.assertEqual((status, json.loads(body)["code"]), (expected, code))

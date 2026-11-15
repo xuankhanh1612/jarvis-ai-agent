@@ -70,9 +70,26 @@ def _authorized(header: str, configured: str) -> bool:
     return hmac.compare_digest(supplied, expected)
 
 
-def _gemini_key_configured() -> bool:
+def _gemini_credential() -> str | None:
     key = os.environ.get("GEMINI_API_KEY", "")
-    return bool(key) and all(32 < ord(char) < 127 for char in key)
+    if not key or any(not (32 < ord(char) < 127) for char in key):
+        return None
+    return key
+
+
+class GeminiProvider(OpenAICompatProvider):
+    """Use only the environment key validated for this web deployment.
+
+    The desktop provider normally prefers Windows Credential Manager or a
+    local .env file. Those stores must not override this web app's server key.
+    """
+
+    def __init__(self, credential: str) -> None:
+        super().__init__("gemini", {"base_url": GEMINI_URL, "max_tokens_field": "max_tokens"})
+        self._credential = credential
+
+    def _key(self) -> str:
+        return self._credential
 
 
 def _messages_from_body(body: object) -> list[dict[str, str]]:
@@ -140,7 +157,7 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
     def do_GET(self) -> None:  # noqa: N802
         if not self._check_access():
             return
-        if not _gemini_key_configured():
+        if not _gemini_credential():
             self._json(503, {"error": "Gemini chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
             return
         # This confirms configuration is present, not that the model is reachable.
@@ -165,14 +182,11 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
             self._json(400, {"error": "Nội dung hoặc lịch sử trò chuyện không hợp lệ.", "code": "invalid_messages"})
             return
-        if not _gemini_key_configured():
+        credential = _gemini_credential()
+        if credential is None:
             self._json(503, {"error": "Gemini chưa được cấu hình trên máy chủ.", "code": "model_not_configured"})
             return
-        provider = OpenAICompatProvider("gemini", {
-            "base_url": GEMINI_URL,
-            "secret": "GEMINI_API_KEY",
-            "max_tokens_field": "max_tokens",
-        })
+        provider = GeminiProvider(credential)
         try:
             result = provider.chat(
                 [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
