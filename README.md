@@ -86,6 +86,23 @@
 
 ---
 
+## 🌐 Triển khai trang giới thiệu lên GitHub Pages
+
+Workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) xuất bản **chỉ** nội dung tĩnh trong thư mục [`pages/`](pages/) — không đăng portfolio cũ, mã Python, dữ liệu máy cục bộ hay địa chỉ tunnel. Địa chỉ dự kiến sau khi triển khai thành công là:
+
+**[https://xuankhanh1612.github.io/jarvis-ai-agent/](https://xuankhanh1612.github.io/jarvis-ai-agent/)**
+
+1. Trong repository GitHub, mở **Settings → Pages → Build and deployment**, chọn **Source: GitHub Actions**.
+2. Gộp thay đổi này vào `main`. Workflow **Deploy JARVIS to GitHub Pages** sẽ chạy tự động mỗi khi có thay đổi được đẩy lên `main`.
+3. Để chạy lại thủ công, mở **Actions → Deploy JARVIS to GitHub Pages → Run workflow**, chọn `main`. Nếu lần chạy đầu thất bại vì Pages chưa được bật, hãy chọn nguồn như bước 1 rồi chạy lại.
+4. Theo dõi kết quả trong tab **Actions**; không cần tạo secret hoặc token riêng.
+
+Có thể xem trang cục bộ bằng `python -m http.server 8000 --directory pages` và mở `http://localhost:8000/`.
+
+> GitHub Pages chỉ phục vụ trang giới thiệu tĩnh; nó không chạy ứng dụng Python/Windows, AI, giọng nói hay điều khiển máy tính. Hãy cài JARVIS v4 trên Windows theo [hướng dẫn đầy đủ](docs/JARVIS_V4.md). Đặc biệt, không đưa server điều khiển từ xa không có xác thực của phiên bản cũ lên Internet công khai.
+
+---
+
 ## 🚀 Quickstart
 
 ### 1. Prerequisites
