@@ -65,7 +65,7 @@ function setBusy(value) {
   document.querySelectorAll(".suggestion").forEach((button) => { button.disabled = value; });
   micButton.disabled = value || !recognition;
   if (value) setStatus("Đang trả lời", "busy");
-  else if (accessKey) setStatus("Sẵn sàng", "ready");
+  else if (accessKey) setStatus("Đã mở khóa", "ready");
 }
 
 function scrollToLatest() {
@@ -239,7 +239,7 @@ unlockForm.addEventListener("submit", async (event) => {
     keyInput.value = "";
     overlay.hidden = true;
     shell.inert = false;
-    setStatus("Sẵn sàng", "ready");
+    setStatus("Đã mở khóa", "ready");
     input.focus();
     scrollToLatest();
   } catch (error) {

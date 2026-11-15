@@ -203,10 +203,17 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel's required export
         except RateLimited:
             self._json(429, {"error": "Mô hình đang giới hạn lượt dùng. Hãy thử lại sau.", "code": "rate_limited"})
             return
-        except (ModelUnavailable, ProviderError):
+        except ModelUnavailable:
+            log.warning("AI model unavailable")
+            self._json(502, {"error": "Mô hình AI hiện không khả dụng. Hãy liên hệ chủ sở hữu triển khai.", "code": "model_unavailable"})
+            return
+        except ProviderError as exc:
             # Provider responses may contain sensitive details; do not echo them.
             log.warning("AI Gateway request failed")
-            self._json(502, {"error": "Không kết nối được mô hình AI. Kiểm tra AI Gateway hoặc thử lại sau.", "code": "provider_error"})
+            if not exc.retryable:
+                self._json(502, {"error": "AI Gateway từ chối truy cập. Hãy kiểm tra xác minh tài khoản, cấu hình và quyền sử dụng mô hình.", "code": "provider_access_denied"})
+            else:
+                self._json(502, {"error": "Không kết nối được mô hình AI. Kiểm tra AI Gateway hoặc thử lại sau.", "code": "provider_error"})
             return
         except Exception:  # noqa: BLE001 - don't leak credentials or provider details
             log.warning("Unexpected AI Gateway failure")

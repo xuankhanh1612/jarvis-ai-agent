@@ -15,7 +15,7 @@ from unittest.mock import patch
 import httpx
 
 from api import chat
-from jarvis.providers.base import ChatResult, ProviderError, RateLimited
+from jarvis.providers.base import ChatResult, ModelUnavailable, ProviderError, RateLimited
 from scripts.web_dev import DevHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -208,13 +208,20 @@ class CloudWebTests(unittest.TestCase):
 
     def test_provider_errors_are_sanitized_and_rate_limits_are_reported(self):
         with patch.dict(os.environ, {"JARVIS_ACCESS_KEY": ACCESS_KEY, "AI_GATEWAY_API_KEY": TOKEN}, clear=True):
-            for error, expected in ((ProviderError("sensitive provider detail " + TOKEN), 502), (RateLimited("private"), 429)):
-                with self.subTest(expected=expected), patch("api.chat.GatewayProvider") as provider:
+            errors = (
+                (ProviderError("sensitive provider detail " + TOKEN), 502, "provider_error"),
+                (ProviderError("private credential " + TOKEN, retryable=False), 502, "provider_access_denied"),
+                (ModelUnavailable("private model detail " + TOKEN), 502, "model_unavailable"),
+                (RateLimited("private"), 429, "rate_limited"),
+            )
+            for error, expected, code in errors:
+                with self.subTest(code=code), patch("api.chat.GatewayProvider") as provider:
                     provider.return_value.chat.side_effect = error
                     status, _, body = self.post({"messages": [{"role": "user", "content": "Hi"}]})
-                    self.assertEqual(status, expected)
+                    self.assertEqual((status, json.loads(body)["code"]), (expected, code))
                     self.assertNotIn(TOKEN.encode(), body)
                     self.assertNotIn(b"sensitive provider detail", body)
+                    self.assertNotIn(b"private", body)
 
     def test_local_web_server_only_serves_web_assets(self):
         status, headers, body = self.request("GET", path="/")
